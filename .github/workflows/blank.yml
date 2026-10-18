@@ -1,0 +1,37 @@
+name: Answer hourly quiz
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quiz
+  cancel-in-progress: false
+
+jobs:
+  answer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download latest questions
+        run: curl -sSL -o questions.csv https://raw.githubusercontent.com/FaisalXL/dso429-hourly-quiz/main/questions.csv
+
+      - name: Answer any new rounds
+        run: python3 solve.py questions.csv answers
+
+      - name: Commit and push
+        run: |
+          git config user.name "quiz-bot"
+          git config user.email "quiz-bot@users.noreply.github.com"
+          git add answers
+          if git diff --cached --quiet; then
+            echo "No new rounds."
+          else
+            git commit -m "Answer new rounds"
+            git push
+          fi
