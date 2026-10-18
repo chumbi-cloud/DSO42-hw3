@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: quiz
@@ -15,23 +16,30 @@ concurrency:
 jobs:
   answer:
     runs-on: ubuntu-latest
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download latest questions
-        run: curl -sSL -o questions.csv https://raw.githubusercontent.com/FaisalXL/dso429-hourly-quiz/main/questions.csv
-
-      - name: Answer any new rounds
-        run: python3 solve.py questions.csv answers
-
-      - name: Commit and push
+      - name: Keep answering new rounds for about 5.5 hours
         run: |
           git config user.name "quiz-bot"
           git config user.email "quiz-bot@users.noreply.github.com"
-          git add answers
-          if git diff --cached --quiet; then
-            echo "No new rounds."
-          else
-            git commit -m "Answer new rounds"
-            git push
-          fi
+          for i in $(seq 1 33); do
+            git pull --rebase --quiet || true
+            curl -sSL -o questions.csv https://raw.githubusercontent.com/FaisalXL/dso429-hourly-quiz/main/questions.csv || true
+            python3 solve.py questions.csv answers || true
+            git add answers
+            if git diff --cached --quiet; then
+              echo "Check $i: no new rounds."
+            else
+              git commit -m "Answer new rounds"
+              git push || (git pull --rebase && git push) || true
+            fi
+            sleep 600
+          done
+
+      - name: Start the next shift
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run "${{ github.workflow }}" --ref main
